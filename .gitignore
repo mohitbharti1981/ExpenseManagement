@@ -51,6 +51,9 @@ Icon
 VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
+### Actual Db code
+expenses.db
+
 ### Environment Variables & Secrets ###
 # Sensitive data (Never commit passwords, API keys, or tokens)
 .env
