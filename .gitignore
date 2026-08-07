@@ -62,4 +62,4 @@ expenses.db
 *.env
 .secret
 .vscode
-requirement.txt
+requirements.txt
