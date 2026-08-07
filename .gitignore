@@ -1,0 +1,62 @@
+### Python Environment ###
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+ENV-sandbox/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+### IDEs and Editors ###
+# Cursor / VS Code settings (Ignore user history, but keep shared launch configurations)
+.vscode/.history/
+.vscode/tasks.json
+.vscode/launch.json
+# Note: Keep .vscode/settings.json tracked if you want your Ruff settings shared with your team!
+
+# macOS specific system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V1
+.fseventsd
+.Spotlight-V10
+.Trashes
+VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+### Environment Variables & Secrets ###
+# Sensitive data (Never commit passwords, API keys, or tokens)
+.env
+.env.local
+.env.*.local
+*.env
+.secret
+.vscode
+requirement.txt

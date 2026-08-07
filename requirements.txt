@@ -1,0 +1,16 @@
+Flask>=3.0
+# Optional — for receipt OCR (free, local):
+# pytesseract>=0.3
+# Pillow>=10.0
+# System: brew install tesseract  (macOS)  |  apt install tesseract-ocr  (Linux)
+
+1. When created a subscription then ideally it should create multiple entries based on frequency selected, if the start date is in past
+2. If start is present or future, then how should we create an enter on the next subscritoinndate , if not then atkleast when opening the app
+3. Date displayed in Dashoard is next billing date, ideally it should be invice dte which is start date and next date based on frequency
+
+
+Bug-
+on doublie ckickig a record, sems like i get to see start date of subscrition and not invoice date for the konth it was deducted.
+Also Payment metghod, card detais, associated email, phone , auto-decut or tax considerate , none of the comumns are showing values 
+When queries DB it seem swe are not even storing assocaited email and phone number in DB 
+Now the app is not opening

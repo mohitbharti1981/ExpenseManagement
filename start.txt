@@ -1,0 +1,28 @@
+# Expense Tracker — Free Tier Stack
+
+## Setup
+cd Project/ExpenseManagement
+source venv/bin/activate
+pip install -r requirements.txt
+python3 database.py          # init / migrate DB (safe to re-run)
+python3 app.py               # http://127.0.0.1:5000
+
+## Optional OCR (future scaling)
+brew install tesseract       # macOS
+pip install pytesseract Pillow
+
+## DB reset (only if schema is broken)
+rm expenses.db && python3 database.py
+
+
+Suggested Next Steps (when you’re ready)
+Monthly budget alerts — compare totals vs a budget threshold
+Deploy free — PythonAnywhere or Render free tier (SQLite file persists on disk)
+
+#### to run the app
+python3 app.py
+
+Now open http://127.0.0.1:5000
+
+#### Run DB cmmand sample
+sqlite3 expenses.db "SELECT * FROM expenses;"

@@ -96,22 +96,26 @@ def generate_recurring_occurrences(conn, until_date=None):
 
     occurrences = []
     for sub in subs:
-        for d in iter_occurrence_dates(sub["start_date"], sub["frequency"], sub["end_date"], until_date):
+        for d in iter_occurrence_dates(
+            sub["start_date"], sub["frequency"], sub["end_date"], until_date
+        ):
             if (sub["id"], d) in skip:
                 continue
-            occurrences.append({
-                "id": f"v{sub['id']}_{d}",
-                "template_id": sub["id"],
-                "vendor_name": sub["vendor_name"],
-                "category": sub["category"],
-                "amount": sub["amount"],
-                "currency": sub["currency"],
-                "frequency": sub["frequency"],
-                "expense_date": d,
-                "status": sub["status"],
-                "is_tax_deductible": sub["is_tax_deductible"],
-                "notes": sub["notes"],
-            })
+            occurrences.append(
+                {
+                    "id": f"v{sub['id']}_{d}",
+                    "template_id": sub["id"],
+                    "vendor_name": sub["vendor_name"],
+                    "category": sub["category"],
+                    "amount": sub["amount"],
+                    "currency": sub["currency"],
+                    "frequency": sub["frequency"],
+                    "expense_date": d,
+                    "status": sub["status"],
+                    "is_tax_deductible": sub["is_tax_deductible"],
+                    "notes": sub["notes"],
+                }
+            )
     return occurrences
 
 
@@ -121,11 +125,13 @@ def matches_python_filters(item):
     args = request.args
     q = args.get("q", "").strip().lower()
     if q:
-        haystack = " ".join([
-            str(item.get("vendor_name") or ""),
-            str(item.get("category") or ""),
-            str(item.get("notes") or ""),
-        ]).lower()
+        haystack = " ".join(
+            [
+                str(item.get("vendor_name") or ""),
+                str(item.get("category") or ""),
+                str(item.get("notes") or ""),
+            ]
+        ).lower()
         if q not in haystack:
             return False
     category = args.get("category", "").strip()
@@ -167,7 +173,8 @@ def parse_expense_form(form):
         "password": form.get("password"),
         "amount": float(form.get("amount") or 0),
         "currency": form.get("currency", "EUR"),
-        "frequency": form.get("frequency") or ("One-time" if record_type == "daily" else None),
+        "frequency": form.get("frequency")
+        or ("One-time" if record_type == "daily" else None),
         "expense_date": expense_date,
         "start_date": start_date,
         "end_date": form.get("end_date") or None,
@@ -246,26 +253,42 @@ def _get_all_expense_items(conn):
             params,
         )
         for r in cursor.fetchall():
-            items.append({
-                "id": r["id"], "template_id": None,
-                "vendor_name": r["vendor_name"], "category": r["category"],
-                "amount": r["amount"], "currency": r["currency"], "frequency": r["frequency"],
-                "expense_date": r["expense_date"], "status": r["status"],
-                "tax_considerate": r["is_tax_deductible"] == 1,
-                "record_type": "daily", "notes": r["notes"],
-            })
+            items.append(
+                {
+                    "id": r["id"],
+                    "template_id": None,
+                    "vendor_name": r["vendor_name"],
+                    "category": r["category"],
+                    "amount": r["amount"],
+                    "currency": r["currency"],
+                    "frequency": r["frequency"],
+                    "expense_date": r["expense_date"],
+                    "status": r["status"],
+                    "tax_considerate": r["is_tax_deductible"] == 1,
+                    "record_type": "daily",
+                    "notes": r["notes"],
+                }
+            )
 
     if record_type != "daily":
         for occ in generate_recurring_occurrences(conn):
             if matches_python_filters(occ):
-                items.append({
-                    "id": occ["id"], "template_id": occ["template_id"],
-                    "vendor_name": occ["vendor_name"], "category": occ["category"],
-                    "amount": occ["amount"], "currency": occ["currency"], "frequency": occ["frequency"],
-                    "expense_date": occ["expense_date"], "status": occ["status"],
-                    "tax_considerate": occ["is_tax_deductible"] == 1,
-                    "record_type": "recurring", "notes": occ["notes"],
-                })
+                items.append(
+                    {
+                        "id": occ["id"],
+                        "template_id": occ["template_id"],
+                        "vendor_name": occ["vendor_name"],
+                        "category": occ["category"],
+                        "amount": occ["amount"],
+                        "currency": occ["currency"],
+                        "frequency": occ["frequency"],
+                        "expense_date": occ["expense_date"],
+                        "status": occ["status"],
+                        "tax_considerate": occ["is_tax_deductible"] == 1,
+                        "record_type": "recurring",
+                        "notes": occ["notes"],
+                    }
+                )
 
     return items
 
@@ -336,15 +359,25 @@ def get_expenses_api():
     items = _get_all_expense_items(conn)
     conn.close()
     items.sort(key=lambda x: (x["expense_date"] or "", str(x["id"])), reverse=True)
-    return jsonify([
-        {
-            "id": i["id"], "template_id": i["template_id"], "vendor": i["vendor_name"],
-            "category": i["category"], "amount": i["amount"], "currency": i["currency"],
-            "frequency": i["frequency"], "display_date": i["expense_date"], "status": i["status"],
-            "tax_considerate": i["tax_considerate"], "record_type": i["record_type"], "notes": i["notes"],
-        }
-        for i in items
-    ])
+    return jsonify(
+        [
+            {
+                "id": i["id"],
+                "template_id": i["template_id"],
+                "vendor": i["vendor_name"],
+                "category": i["category"],
+                "amount": i["amount"],
+                "currency": i["currency"],
+                "frequency": i["frequency"],
+                "display_date": i["expense_date"],
+                "status": i["status"],
+                "tax_considerate": i["tax_considerate"],
+                "record_type": i["record_type"],
+                "notes": i["notes"],
+            }
+            for i in items
+        ]
+    )
 
 
 @app.route("/api/expense/<expense_id>")
@@ -394,6 +427,20 @@ def delete_expense(expense_id):
     return jsonify({"status": "success", "message": "Expense deleted successfully!"})
 
 
+@app.route("/api/subscriptions")
+def get_subscriptions_api():
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM expenses WHERE record_type = 'recurring' AND parent_expense_id IS NULL"
+        ).fetchall()
+        return jsonify([dict(row) for row in rows])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/categories")
 def get_categories():
     conn = get_connection()
@@ -423,13 +470,15 @@ def report_summary():
         by_type[t]["count"] += 1
         by_type[t]["total"] += i["amount"]
 
-    return jsonify({
-        "count": len(items),
-        "total": round(total, 2),
-        "tax_considerate_total": round(tax_total, 2),
-        "by_category": sorted(by_cat.values(), key=lambda x: -x["total"]),
-        "by_type": sorted(by_type.values(), key=lambda x: -x["total"]),
-    })
+    return jsonify(
+        {
+            "count": len(items),
+            "total": round(total, 2),
+            "tax_considerate_total": round(tax_total, 2),
+            "by_category": sorted(by_cat.values(), key=lambda x: -x["total"]),
+            "by_type": sorted(by_type.values(), key=lambda x: -x["total"]),
+        }
+    )
 
 
 @app.route("/api/reports/export")
@@ -441,20 +490,43 @@ def export_csv():
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["For Person", "Category", "Amount", "Currency", "Frequency",
-                      "Date", "Status", "Tax Considerate", "Record Type", "Notes"])
+    writer.writerow(
+        [
+            "For Person",
+            "Category",
+            "Amount",
+            "Currency",
+            "Frequency",
+            "Date",
+            "Status",
+            "Tax Considerate",
+            "Record Type",
+            "Notes",
+        ]
+    )
     for i in items:
-        writer.writerow([
-            i["vendor_name"], i["category"], i["amount"], i["currency"], i["frequency"],
-            i["expense_date"], i["status"], "Yes" if i["tax_considerate"] else "No",
-            i["record_type"], i["notes"],
-        ])
+        writer.writerow(
+            [
+                i["vendor_name"],
+                i["category"],
+                i["amount"],
+                i["currency"],
+                i["frequency"],
+                i["expense_date"],
+                i["status"],
+                "Yes" if i["tax_considerate"] else "No",
+                i["record_type"],
+                i["notes"],
+            ]
+        )
 
     mem = io.BytesIO()
     mem.write(output.getvalue().encode("utf-8-sig"))
     mem.seek(0)
     filename = f"expense_report_{date.today().isoformat()}.csv"
-    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=filename)
+    return send_file(
+        mem, mimetype="text/csv", as_attachment=True, download_name=filename
+    )
 
 
 @app.route("/api/upcoming")
@@ -478,11 +550,19 @@ def upcoming_expenses():
             d = advance_date(d, sub["frequency"])
             guard += 1
         if d and (not end_limit or d <= end_limit) and today < d <= end:
-            upcoming.append({
-                "id": sub["id"], "vendor": sub["vendor_name"], "category": sub["category"],
-                "amount": sub["amount"], "currency": sub["currency"], "frequency": sub["frequency"],
-                "start_date": sub["start_date"], "next_billing": d.isoformat(), "status": sub["status"],
-            })
+            upcoming.append(
+                {
+                    "id": sub["id"],
+                    "vendor": sub["vendor_name"],
+                    "category": sub["category"],
+                    "amount": sub["amount"],
+                    "currency": sub["currency"],
+                    "frequency": sub["frequency"],
+                    "start_date": sub["start_date"],
+                    "next_billing": d.isoformat(),
+                    "status": sub["status"],
+                }
+            )
     upcoming.sort(key=lambda x: x["next_billing"])
     return jsonify(upcoming)
 
@@ -490,7 +570,9 @@ def upcoming_expenses():
 def extract_receipt_fields(text):
     """Best-effort parsing from OCR text — free local heuristic, not ML."""
     amount = None
-    amount_match = re.search(r"(?:total|amount|sum|€|eur)\s*[:\s]*(\d+[.,]\d{2})", text, re.I)
+    amount_match = re.search(
+        r"(?:total|amount|sum|€|eur)\s*[:\s]*(\d+[.,]\d{2})", text, re.IGNORECASE
+    )
     if not amount_match:
         amount_match = re.search(r"(\d+[.,]\d{2})\s*(?:€|EUR)?", text)
     if amount_match:
@@ -531,7 +613,9 @@ def ocr_receipt():
 
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in {".png", ".jpg", ".jpeg", ".webp", ".pdf"}:
-        return jsonify({"status": "error", "message": "Supported: PNG, JPG, WEBP, PDF"}), 400
+        return jsonify(
+            {"status": "error", "message": "Supported: PNG, JPG, WEBP, PDF"}
+        ), 400
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_path = os.path.join(UPLOAD_DIR, f"{ts}_{file.filename}")
@@ -542,11 +626,13 @@ def ocr_receipt():
         from PIL import Image
 
         if ext == ".pdf":
-            return jsonify({
-                "status": "partial",
-                "message": "PDF saved. Install pdf2image + poppler for PDF OCR. Fields not auto-filled.",
-                "receipt_path": save_path,
-            })
+            return jsonify(
+                {
+                    "status": "partial",
+                    "message": "PDF saved. Install pdf2image + poppler for PDF OCR. Fields not auto-filled.",
+                    "receipt_path": save_path,
+                }
+            )
 
         image = Image.open(save_path)
         text = pytesseract.image_to_string(image)
@@ -555,17 +641,21 @@ def ocr_receipt():
         fields["status"] = "success"
         return jsonify(fields)
     except ImportError:
-        return jsonify({
-            "status": "partial",
-            "message": "Receipt saved. Install pytesseract + Pillow + Tesseract for OCR.",
-            "receipt_url_path": save_path,
-        })
+        return jsonify(
+            {
+                "status": "partial",
+                "message": "Receipt saved. Install pytesseract + Pillow + Tesseract for OCR.",
+                "receipt_url_path": save_path,
+            }
+        )
     except Exception as e:
-        return jsonify({
-            "status": "partial",
-            "message": f"Receipt saved but OCR failed: {e}",
-            "receipt_url_path": save_path,
-        })
+        return jsonify(
+            {
+                "status": "partial",
+                "message": f"Receipt saved but OCR failed: {e}",
+                "receipt_url_path": save_path,
+            }
+        )
 
 
 if __name__ == "__main__":
