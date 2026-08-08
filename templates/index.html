@@ -442,25 +442,20 @@
 
         <!-- RECURRING / FULL FORM -->
         <section id="recurring" class="panel">
-            <section id="recurring" class="panel">
-                <div class="card">
-                    <div class="card-head"><h3>Your Subscriptions</h3></div>
-                    <p class="card-hint">Double-click to manage status or end date. Other details are locked once created — add a new subscription below if they change.</p>
-                    <div class="table-wrap">
-                        <table>
-                            <thead><tr><th>For Person</th><th>Amount</th><th>Frequency</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
-                            <tbody id="subsBody"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
-                        </table>
-                    </div>
+            <div class="card">
+                <div class="card-head"><h3>Your Subscriptions</h3></div>
+                <p class="card-hint">Double-click to manage status or end date. Other details are locked once created — add a new subscription below if they change.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>For Person</th><th>Amount</th><th>Frequency</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
+                        <tbody id="subsBody"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+                    </table>
                 </div>
-                <div class="card">
-                    <h2 id="formTitle">Add Subscription / Recurring Expense</h2>
-                    <div id="msg" class="alert"></div>
-                    <form id="expForm">
-        <div class="card">
-            <h2 id="formTitle">Add Subscription / Recurring Expense</h2>
-            <div id="msg" class="alert"></div>
-            <form id="expForm">
+            </div>
+            <div class="card">
+                <h2 id="formTitle">Add Subscription / Recurring Expense</h2>
+                <div id="msg" class="alert"></div>
+                <form id="expForm">
                 <input type="hidden" name="expense_id" id="expense_id">
                 <input type="hidden" name="currency" id="currency" value="EUR">
                 <input type="hidden" name="record_type" value="recurring">
@@ -851,7 +846,6 @@ function loadRecordIntoForm(id, recordType) {
         document.getElementById('status').value = data.status || 'Active';
         document.getElementById('start_date').value = data.start_date || '';
         document.getElementById('end_date').value = data.end_date || '';
-        document.getElementById('next_billing_date').value = data.next_billing_date || '';
         document.getElementById('bank_account_last4').value = data.bank_account_last4 || '';
         document.getElementById('associated_email').value = data.associated_email || '';
         document.getElementById('associated_phone').value = data.associated_phone || '';

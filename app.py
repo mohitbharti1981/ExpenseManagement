@@ -298,13 +298,89 @@ def home():
     return render_template("index.html")
 
 
+def _parse_virtual_id(expense_id):
+    """Return (subscription_id, occurrence_date) if expense_id is a virtual
+    recurring-occurrence id like 'v12_2026-03-01', else None."""
+    if not expense_id or not expense_id.startswith("v") or "_" not in expense_id:
+        return None
+    try:
+        sub_id_str, occ_date = expense_id[1:].split("_", 1)
+        return int(sub_id_str), occ_date
+    except ValueError:
+        return None
+
+
 @app.route("/add_expense", methods=["POST"])
 def add_expense():
     expense_id = request.form.get("expense_id")
+    edit_scope = request.form.get("edit_scope")
     data = parse_expense_form(request.form)
 
     conn = get_connection()
     cursor = conn.cursor()
+
+    virtual = _parse_virtual_id(expense_id) if edit_scope == "occurrence" else None
+    if virtual:
+        sub_id, occ_date = virtual
+        sub = conn.execute("SELECT * FROM expenses WHERE id = ?", (sub_id,)).fetchone()
+        if not sub:
+            conn.close()
+            return jsonify(
+                {"status": "error", "message": "Subscription not found"}
+            ), 404
+
+        # Materialize this single occurrence as its own standalone record,
+        # carrying over anything the form didn't override.
+        materialized = dict(sub)
+        materialized.update(
+            {
+                "expense_date": data["expense_date"] or occ_date,
+                "amount": data["amount"] or sub["amount"],
+                "category": data["category"] or sub["category"],
+                "status": data["status"] or sub["status"],
+                "is_tax_deductible": data["is_tax_deductible"],
+                "notes": data["notes"],
+                "record_type": "daily",
+                "frequency": "One-time",
+                "start_date": None,
+                "end_date": None,
+                "parent_expense_id": sub_id,
+            }
+        )
+        materialized.pop("id", None)
+        materialized.pop("created_at", None)
+
+        try:
+            cursor.execute(
+                """
+                INSERT INTO expenses (
+                    vendor_name, website_url, username, password, amount, currency, frequency,
+                    expense_date, start_date, end_date, auto_deduction,
+                    payment_method_type, bank_account_last4, associated_email, associated_phone,
+                    billing_address, category, is_tax_deductible, tax_rate_percent,
+                    receipt_url_path, status, notes, record_type, parent_expense_id
+                ) VALUES (
+                    :vendor_name, :website_url, :username, :password, :amount, :currency, :frequency,
+                    :expense_date, :start_date, :end_date, :auto_deduction,
+                    :payment_method_type, :bank_account_last4, :associated_email, :associated_phone,
+                    :billing_address, :category, :is_tax_deductible, :tax_rate_percent,
+                    :receipt_url_path, :status, :notes, :record_type, :parent_expense_id
+                )
+                """,
+                materialized,
+            )
+            cursor.execute(
+                "INSERT OR IGNORE INTO expense_exceptions (subscription_id, occurrence_date) VALUES (?, ?)",
+                (sub_id, occ_date),
+            )
+            conn.commit()
+            return jsonify(
+                {"status": "success", "message": "Invoice updated successfully!"}
+            ), 200
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 400
+        finally:
+            conn.close()
 
     if expense_id:
         data["id"] = int(expense_id)
@@ -425,6 +501,30 @@ def delete_expense(expense_id):
     conn.commit()
     conn.close()
     return jsonify({"status": "success", "message": "Expense deleted successfully!"})
+
+
+@app.route("/api/occurrence/<occurrence_id>")
+def get_occurrence(occurrence_id):
+    virtual = _parse_virtual_id(occurrence_id)
+    conn = get_connection()
+    if virtual:
+        sub_id, occ_date = virtual
+        sub = conn.execute("SELECT * FROM expenses WHERE id = ?", (sub_id,)).fetchone()
+        conn.close()
+        if not sub:
+            return jsonify({"error": "Not found"}), 404
+        d = dict(sub)
+        d["expense_date"] = occ_date
+        return jsonify(d)
+
+    try:
+        eid = int(occurrence_id)
+    except ValueError:
+        conn.close()
+        return jsonify({"error": "Not found"}), 404
+    row = conn.execute("SELECT * FROM expenses WHERE id = ?", (eid,)).fetchone()
+    conn.close()
+    return jsonify(row_to_dict(row)) if row else (jsonify({"error": "Not found"}), 404)
 
 
 @app.route("/api/subscriptions")

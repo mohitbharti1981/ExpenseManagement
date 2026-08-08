@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS expense_exceptions (
 
 MIGRATIONS = [
     ("expense_date", "ALTER TABLE expenses ADD COLUMN expense_date TEXT"),
-    ("record_type", "ALTER TABLE expenses ADD COLUMN record_type TEXT DEFAULT 'recurring'"),
+    (
+        "record_type",
+        "ALTER TABLE expenses ADD COLUMN record_type TEXT DEFAULT 'recurring'",
+    ),
     ("created_at", "ALTER TABLE expenses ADD COLUMN created_at TEXT"),
     ("is_template", "ALTER TABLE expenses ADD COLUMN is_template INTEGER DEFAULT 0"),
     ("parent_expense_id", "ALTER TABLE expenses ADD COLUMN parent_expense_id INTEGER"),
