@@ -753,16 +753,52 @@ def upcoming_expenses():
     return jsonify(upcoming)
 
 
+def _parse_amount_str(raw):
+    """Normalize a matched amount string like '1,245.99', '1.245,99', or
+    '45,99' into a float, handling both US and EU thousands/decimal styles."""
+    raw = raw.strip()
+    if "," in raw and "." in raw:
+        # Whichever separator appears last is the decimal separator.
+        if raw.rfind(",") > raw.rfind("."):
+            raw = raw.replace(".", "").replace(",", ".")
+        else:
+            raw = raw.replace(",", "")
+    elif "," in raw:
+        # Single comma: decimal separator only if exactly 2 digits follow.
+        if re.search(r",\d{2}$", raw):
+            raw = raw.replace(",", ".")
+        else:
+            raw = raw.replace(",", "")
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def extract_receipt_fields(text):
     """Best-effort parsing from OCR text — free local heuristic, not ML."""
     amount = None
+    currency_symbols = r"€|£|\$|EUR|USD|GBP"
+    # A currency-shaped number: 1-3 leading digits, optional thousands
+    # groups, optional 1-2 digit decimal. Deliberately does NOT allow
+    # arbitrary runs of digits/separators (that previously let the regex
+    # cross a line break and swallow part of a date, e.g. "15.03.2026",
+    # as the amount).
+    num = r"\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?"
+    # [ \t:]* (not \s*) keeps the match on a single line, so a trigger
+    # word/symbol can't reach across a newline into unrelated digits.
+    # \btotal\b (not just "total") so "Subtotal" doesn't get mistaken for
+    # the grand total.
     amount_match = re.search(
-        r"(?:total|amount|sum|€|eur)\s*[:\s]*(\d+[.,]\d{2})", text, re.IGNORECASE
+        rf"(?:\btotal\b|\bamount\b|\bsum\b|{currency_symbols})[ \t:]*"
+        rf"(?:{currency_symbols})?[ \t]*({num})",
+        text,
+        re.IGNORECASE,
     )
     if not amount_match:
-        amount_match = re.search(r"(\d+[.,]\d{2})\s*(?:€|EUR)?", text)
+        amount_match = re.search(rf"({num})[ \t]*(?:{currency_symbols})?", text)
     if amount_match:
-        amount = float(amount_match.group(1).replace(",", "."))
+        amount = _parse_amount_str(amount_match.group(1))
 
     expense_date = None
     date_match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
@@ -788,6 +824,86 @@ def extract_receipt_fields(text):
     }
 
 
+# @app.route("/api/ocr/receipt", methods=["POST"])
+# def ocr_receipt():
+#     if "receipt" not in request.files:
+#         return jsonify({"status": "error", "message": "No file uploaded"}), 400
+
+#     file = request.files["receipt"]
+#     if not file.filename:
+#         return jsonify({"status": "error", "message": "Empty filename"}), 400
+
+#     ext = os.path.splitext(file.filename)[1].lower()
+#     if ext not in {".png", ".jpg", ".jpeg", ".webp", ".pdf"}:
+#         return jsonify(
+#             {"status": "error", "message": "Supported: PNG, JPG, WEBP, PDF"}
+#         ), 400
+
+#     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     save_path = os.path.join(UPLOAD_DIR, f"{ts}_{file.filename}")
+#     file.save(save_path)
+
+#     try:
+#         import pytesseract
+#         from PIL import Image, ImageOps
+#     except ImportError:
+#         return jsonify(
+#             {
+#                 "status": "partial",
+#                 "message": "Receipt saved. Install pytesseract + Pillow for OCR: "
+#                 "pip install pytesseract Pillow",
+#                 "receipt_url_path": save_path,
+#             }
+#         )
+
+#     if ext == ".pdf":
+#         return jsonify(
+#             {
+#                 "status": "partial",
+#                 "message": "PDF saved. Install pdf2image + poppler for PDF OCR. Fields not auto-filled.",
+#                 "receipt_path": save_path,
+#             }
+#         )
+
+#     try:
+#         image = Image.open(save_path)
+#         # Basic preprocessing improves OCR accuracy on phone-camera photos:
+#         # normalize orientation, convert to grayscale, boost contrast, and
+#         # upscale small images so text isn't too thin to recognize.
+#         image = ImageOps.exif_transpose(image)
+#         image = ImageOps.grayscale(image)
+#         image = ImageOps.autocontrast(image)
+#         if max(image.size) < 1500:
+#             scale = 1500 / max(image.size)
+#             image = image.resize(
+#                 (int(image.width * scale), int(image.height * scale)), Image.LANCZOS
+#             )
+
+#         text = pytesseract.image_to_string(image)
+#         fields = extract_receipt_fields(text)
+#         fields["receipt_url_path"] = save_path
+#         fields["status"] = "success"
+#         return jsonify(fields)
+#     except pytesseract.TesseractNotFoundError:
+#         return jsonify(
+#             {
+#                 "status": "partial",
+#                 "message": "Receipt saved. The Tesseract binary isn't installed or "
+#                 "isn't on your PATH — install it (e.g. 'brew install tesseract' "
+#                 "on macOS, 'apt install tesseract-ocr' on Linux).",
+#                 "receipt_url_path": save_path,
+#             }
+#         )
+#     except Exception as e:
+#         return jsonify(
+#             {
+#                 "status": "partial",
+#                 "message": f"Receipt saved but OCR failed: {e}",
+#                 "receipt_url_path": save_path,
+#             }
+#         )
+
+
 @app.route("/api/ocr/receipt", methods=["POST"])
 def ocr_receipt():
     if "receipt" not in request.files:
@@ -809,28 +925,103 @@ def ocr_receipt():
 
     try:
         import pytesseract
-        from PIL import Image
+        from PIL import Image, ImageOps
+    except ImportError:
+        return jsonify(
+            {
+                "status": "partial",
+                "message": "Receipt saved. Install pytesseract + Pillow for OCR: "
+                "pip install pytesseract Pillow",
+                "receipt_url_path": save_path,
+            }
+        )
 
-        if ext == ".pdf":
+    # Handle PDF files
+    if ext == ".pdf":
+        try:
+            from pdf2image import convert_from_path
+
+            # Convert PDF to images (first page only for speed, or all pages)
+            images = convert_from_path(save_path, first_page=1, last_page=1, dpi=300)
+
+            if not images:
+                return jsonify(
+                    {
+                        "status": "partial",
+                        "message": "PDF has no pages to scan.",
+                        "receipt_url_path": save_path,
+                    }
+                )
+
+            # Process the first page
+            image = images[0]
+
+            # Apply same preprocessing as images
+            image = ImageOps.grayscale(image)
+            image = ImageOps.autocontrast(image)
+            if max(image.size) < 1500:
+                scale = 1500 / max(image.size)
+                image = image.resize(
+                    (int(image.width * scale), int(image.height * scale)), Image.LANCZOS
+                )
+
+            # Run OCR
+            text = pytesseract.image_to_string(image)
+            fields = extract_receipt_fields(text)
+            fields["receipt_url_path"] = save_path
+            fields["status"] = "success"
+
+            # Add a note about PDF scanning
+            fields["notes"] = (
+                f"OCR extracted from PDF — please verify before saving. {fields.get('notes', '')}"
+            )
+
+            return jsonify(fields)
+
+        except ImportError:
             return jsonify(
                 {
                     "status": "partial",
-                    "message": "PDF saved. Install pdf2image + poppler for PDF OCR. Fields not auto-filled.",
+                    "message": "PDF saved but cannot scan. Install pdf2image: pip install pdf2image (also requires poppler: brew install poppler)",
                     "receipt_path": save_path,
                 }
             )
+        except Exception as e:
+            return jsonify(
+                {
+                    "status": "partial",
+                    "message": f"PDF saved but OCR failed: {e!s}",
+                    "receipt_url_path": save_path,
+                }
+            )
 
+    # Handle image files (existing code)
+    try:
         image = Image.open(save_path)
+        # Basic preprocessing improves OCR accuracy on phone-camera photos:
+        # normalize orientation, convert to grayscale, boost contrast, and
+        # upscale small images so text isn't too thin to recognize.
+        image = ImageOps.exif_transpose(image)
+        image = ImageOps.grayscale(image)
+        image = ImageOps.autocontrast(image)
+        if max(image.size) < 1500:
+            scale = 1500 / max(image.size)
+            image = image.resize(
+                (int(image.width * scale), int(image.height * scale)), Image.LANCZOS
+            )
+
         text = pytesseract.image_to_string(image)
         fields = extract_receipt_fields(text)
         fields["receipt_url_path"] = save_path
         fields["status"] = "success"
         return jsonify(fields)
-    except ImportError:
+    except pytesseract.TesseractNotFoundError:
         return jsonify(
             {
                 "status": "partial",
-                "message": "Receipt saved. Install pytesseract + Pillow + Tesseract for OCR.",
+                "message": "Receipt saved. The Tesseract binary isn't installed or "
+                "isn't on your PATH — install it (e.g. 'brew install tesseract' "
+                "on macOS, 'apt install tesseract-ocr' on Linux).",
                 "receipt_url_path": save_path,
             }
         )

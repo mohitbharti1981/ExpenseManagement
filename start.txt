@@ -26,3 +26,8 @@ Now open http://127.0.0.1:5000
 
 #### Run DB cmmand sample
 sqlite3 expenses.db "SELECT * FROM expenses;"
+
+#### Install for OCR
+python3 -m pip install pytesseract Pillow
+python3 -m pip install pdf2image
+brew install poppler

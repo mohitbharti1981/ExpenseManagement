@@ -495,12 +495,12 @@
             </div>
 
             <div class="card">
-                <div class="card-head"><h3>Receipt Scan (Future OCR)</h3></div>
-                <p class="hint">Upload a receipt to auto-fill fields. Requires free local Tesseract: <code>brew install tesseract</code> + <code>pip install pytesseract Pillow</code></p>
+                <div class="card-head"><h3>Receipt Scan (OCR)</h3></div>
+                <p class="hint">Upload a receipt image to auto-fill the fields below. Runs fully locally via Tesseract — nothing leaves your machine. Requires <code>pip install pytesseract Pillow</code> + the Tesseract binary (<code>brew install tesseract</code> on macOS, <code>apt install tesseract-ocr</code> on Linux). Without it, the receipt is still saved but fields aren't auto-filled.</p>
                 <div class="ocr-zone">
                     <input type="file" id="receiptFile" accept="image/*,.pdf">
                     <div class="btn-row" style="border:none; justify-content:center;">
-                        <button class="primary" style="flex:0;" onclick="scanReceipt()">Scan receipt</button>
+                        <button class="primary" style="flex:0;" id="scanReceiptBtn" onclick="scanReceipt()">Scan receipt</button>
                     </div>
                     <div id="ocrResult" class="hint" style="margin-top:12px;"></div>
                 </div>
@@ -1042,22 +1042,44 @@ function resetEditForm() {
 async function scanReceipt() {
     const file = document.getElementById('receiptFile').files[0];
     if (!file) return alert('Choose a receipt image first.');
-    const fd = new FormData();
-    fd.append('receipt', file);
-    const res = await fetch('/api/ocr/receipt', { method: 'POST', body: fd });
-    const data = await res.json();
+
+    const btn = document.getElementById('scanReceiptBtn');
     const el = document.getElementById('ocrResult');
-    el.textContent = data.message || 'Scan complete.';
-    if (data.vendor_name) document.querySelector('#dailyForm [name=vendor_name]').value = data.vendor_name;
-    if (data.amount) document.querySelector('#dailyForm [name=amount]').value = data.amount;
-    if (data.expense_date) document.getElementById('daily_date').value = data.expense_date;
-    if (data.notes) document.querySelector('#dailyForm [name=notes]').value = data.notes;
-    if (data.receipt_url_path) {
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden'; hidden.name = 'receipt_url_path'; hidden.value = data.receipt_url_path;
-        document.getElementById('dailyForm').appendChild(hidden);
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+    el.textContent = 'Reading receipt locally, this can take a few seconds…';
+    el.style.color = '';
+
+    try {
+        const fd = new FormData();
+        fd.append('receipt', file);
+        const res = await fetch('/api/ocr/receipt', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        el.textContent = data.message || 'Scan complete.';
+        el.style.color = data.status === 'success' ? 'var(--success)'
+            : data.status === 'error' ? 'var(--danger)' : 'var(--warning)';
+
+        if (data.vendor_name) document.querySelector('#dailyForm [name=vendor_name]').value = data.vendor_name;
+        if (data.amount) document.querySelector('#dailyForm [name=amount]').value = data.amount;
+        if (data.expense_date) document.getElementById('daily_date').value = data.expense_date;
+        if (data.notes) document.querySelector('#dailyForm [name=notes]').value = data.notes;
+        if (data.receipt_url_path) {
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden'; hidden.name = 'receipt_url_path'; hidden.value = data.receipt_url_path;
+            document.getElementById('dailyForm').appendChild(hidden);
+        }
+        if (data.status === 'success') {
+            showToast('Receipt scanned — review the fields before saving.', false);
+        }
+        document.querySelector('[data-panel=daily]').click();
+    } catch (err) {
+        el.textContent = 'Scan failed: could not reach the server.';
+        el.style.color = 'var(--danger)';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Scan receipt';
     }
-    document.querySelector('[data-panel=daily]').click();
 }
 
 async function openInvoiceEditor(id) {
