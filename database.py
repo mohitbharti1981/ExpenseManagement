@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     tax_rate_percent REAL DEFAULT 0,
     receipt_url_path TEXT,
     status TEXT DEFAULT 'Active',
+    deactivated_on TEXT,
     notes TEXT,
     record_type TEXT DEFAULT 'recurring',
     is_template INTEGER DEFAULT 0,
@@ -38,6 +39,18 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE TABLE IF NOT EXISTS expense_exceptions (
     subscription_id INTEGER NOT NULL,
     occurrence_date TEXT NOT NULL,
+    PRIMARY KEY (subscription_id, occurrence_date)
+);
+
+CREATE TABLE IF NOT EXISTS occurrence_overrides (
+    subscription_id INTEGER NOT NULL,
+    occurrence_date TEXT NOT NULL,
+    amount REAL,
+    category TEXT,
+    status TEXT,
+    is_tax_deductible INTEGER,
+    notes TEXT,
+    expense_date TEXT,
     PRIMARY KEY (subscription_id, occurrence_date)
 );
 """
@@ -51,9 +64,8 @@ MIGRATIONS = [
     ("created_at", "ALTER TABLE expenses ADD COLUMN created_at TEXT"),
     ("is_template", "ALTER TABLE expenses ADD COLUMN is_template INTEGER DEFAULT 0"),
     ("parent_expense_id", "ALTER TABLE expenses ADD COLUMN parent_expense_id INTEGER"),
+    ("deactivated_on", "ALTER TABLE expenses ADD COLUMN deactivated_on TEXT"),
 ]
-# Note: is_template / parent_expense_id / next_billing_date are legacy columns,
-# no longer used by app.py. Left in place so old DBs don't break; harmless.
 
 
 def get_connection():

@@ -254,6 +254,45 @@
         .hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
         .hint code { background: var(--surface-sunken); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 11.5px; }
 
+        /* ---------- Toast ---------- */
+        #toastStack {
+            position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+            z-index: 999; display: flex; flex-direction: column; gap: 8px;
+            width: 100%; max-width: 420px; padding: 0 16px; pointer-events: none;
+        }
+        .toast {
+            pointer-events: auto;
+            background: var(--text); color: #fff;
+            padding: 11px 16px; border-radius: var(--radius-sm);
+            font-size: 13px; font-weight: 600; box-shadow: var(--shadow);
+            display: flex; align-items: center; gap: 10px;
+            opacity: 0; transform: translateY(-10px);
+            animation: toastIn 0.18s ease-out forwards;
+        }
+        .toast.success { background: #0F7B4F; }
+        .toast.error { background: #B3261E; }
+        @keyframes toastIn { to { opacity: 1; transform: translateY(0); } }
+        .toast.leaving { animation: toastOut 0.18s ease-in forwards; }
+        @keyframes toastOut { to { opacity: 0; transform: translateY(-10px); } }
+
+        /* ---------- Collapsible advanced sections ---------- */
+        details.collapsible { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 14px; overflow: hidden; }
+        details.collapsible summary {
+            list-style: none; cursor: pointer; padding: 11px 14px;
+            font-size: 12.5px; font-weight: 700; color: var(--text-secondary);
+            background: var(--surface-sunken); display: flex; align-items: center; gap: 8px;
+            text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        details.collapsible summary::-webkit-details-marker { display: none; }
+        details.collapsible summary::before { content: "▸"; font-size: 11px; transition: transform 0.15s; color: var(--text-tertiary); }
+        details.collapsible[open] summary::before { transform: rotate(90deg); }
+        details.collapsible summary .summary-hint { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-tertiary); margin-left: auto; font-size: 11.5px; }
+        details.collapsible .details-body { padding: 16px 14px 4px; }
+        details.collapsible .section-title { margin-top: 0; }
+
+        .row-actions { display: flex; gap: 6px; }
+        .row-actions button { padding: 5px 10px; font-size: 0.78rem; }
+
         /* ---------- Mobile ---------- */
         @media (max-width: 900px) {
             .sidebar { position: static; width: 100%; flex-direction: row; align-items: center; border-right: none; border-bottom: 1px solid var(--sidebar-border); }
@@ -273,6 +312,8 @@
     </style>
 </head>
 <body>
+
+<div id="toastStack" aria-live="polite"></div>
 
 <div class="app-shell">
     <aside class="sidebar">
@@ -360,6 +401,32 @@
                     <div class="checkbox-row" style="margin-top:14px;">
                         <label class="checkbox-item"><input type="checkbox" name="is_tax_deductible" id="invoice_tax"> Tax Considerate</label>
                     </div>
+                    <details class="collapsible" style="margin-top:14px;">
+                        <summary>Advanced details <span class="summary-hint">optional — website, login, payment info</span></summary>
+                        <div class="details-body">
+                            <div class="grid grid-3">
+                                <div class="field"><label>Website / Link</label><input type="text" name="website_url" id="daily_website_url"></div>
+                                <div class="field"><label>Username</label><input type="text" name="username" id="daily_username"></div>
+                                <div class="field"><label>Password</label><input type="password" name="password" id="daily_password"></div>
+                                <div class="field"><label>Payment Method</label>
+                                    <select name="payment_method_type" id="daily_payment_method_type">
+                                        <option value="Credit Card">Credit Card</option><option value="Debit Card">Debit Card</option>
+                                        <option value="Bank Account">Bank Account</option><option value="Direct Debit">Direct Debit</option>
+                                        <option value="SEPA">SEPA</option><option value="PayPal">PayPal</option>
+                                        <option value="Apple Pay">Apple Pay</option><option value="Google Pay">Google Pay</option>
+                                        <option value="Cash">Cash</option><option value="Gift Card">Gift Card</option>
+                                        <option value="Crypto">Crypto</option><option value="Other">Other</option>
+                                    </select>
+                                    <div class="other-field" id="daily_paymentOtherWrap"><input type="text" id="daily_payment_method_other" placeholder="Custom method"></div>
+                                </div>
+                                <div class="field"><label>Card / Account Last 4</label><input type="text" name="bank_account_last4" id="daily_bank_account_last4" maxlength="4"></div>
+                                <div class="field"><label>Associated Email</label><input type="email" name="associated_email" id="daily_associated_email"></div>
+                                <div class="field"><label>Associated Phone</label><input type="text" name="associated_phone" id="daily_associated_phone"></div>
+                                <div class="field"><label>Billing Address</label><input type="text" name="billing_address" id="daily_billing_address"></div>
+                                <div class="field"><label>Receipt Path / Link</label><input type="text" name="receipt_url_path" id="daily_receipt_url_path"></div>
+                            </div>
+                        </div>
+                    </details>
                     <div class="field wide" style="margin-top:12px;"><label>Notes</label><textarea name="notes" id="invoice_notes" rows="2"></textarea></div>
                     <div class="btn-row">
                         <button type="submit" class="primary" id="invoiceSubmitBtn">Save invoice</button>
@@ -373,7 +440,7 @@
                 <p class="card-hint">Double-click a row to edit.</p>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Bill Date</th><th>For Person</th><th>Category</th><th>Amount</th><th>Type</th><th>Tax</th><th>Status</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Bill Date</th><th>For Person</th><th>Category</th><th>Amount</th><th>Frequency</th><th>Type</th><th>Tax</th><th>Auto Deduct</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="tBody"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
                     </table>
                 </div>
@@ -444,34 +511,27 @@
         <section id="recurring" class="panel">
             <div class="card">
                 <div class="card-head"><h3>Your Subscriptions</h3></div>
-                <p class="card-hint">Double-click to manage status or end date. Other details are locked once created — add a new subscription below if they change.</p>
+                <p class="card-hint">"Edit subscription" changes all details — edit the subscription itself, not individual invoices.</p>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>For Person</th><th>Amount</th><th>Frequency</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
-                        <tbody id="subsBody"><tr class="empty-row"><td colspan="6">Loading…</td></tr></tbody>
+                        <thead><tr><th>ID</th><th>For Person</th><th>Amount</th><th>Frequency</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="subsBody"><tr class="empty-row"><td colspan="7">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
             <div class="card">
-                <h2 id="formTitle">Add Subscription / Recurring Expense</h2>
+                <div class="card-head"><h3 id="formTitle" style="margin:0;">Add Subscription / Recurring Expense</h3></div>
                 <div id="msg" class="alert"></div>
                 <form id="expForm">
                 <input type="hidden" name="expense_id" id="expense_id">
                 <input type="hidden" name="currency" id="currency" value="EUR">
                 <input type="hidden" name="record_type" value="recurring">
                 <input type="hidden" name="edit_scope" value="subscription">
-                <p class="section-title">Account Details</p>
-                <div class="grid">
-                    <div class="field"><label>For Person *</label><input type="text" name="vendor_name" id="vendor_name" required></div>
-                    <div class="field"><label>Website / Link</label><input type="text" name="website_url" id="website_url"></div>
-                    <div class="field"><label>Username</label><input type="text" name="username" id="username"></div>
-                    <div class="field"><label>Password</label><input type="password" name="password" id="password"></div>
-                </div>
-
-                <p class="section-title">Billing</p>
-                <div class="grid">
-                    <div class="field"><label>Amount *</label><div class="amount-wrap"><span class="currency-badge">EUR</span><input type="number" step="0.01" name="amount" id="amount" required></div></div>
-                    <div class="field">
+                
+                <div class="grid grid-4" style="margin-top:8px;">
+                    <div class="field" style="margin-bottom:8px;"><label>For Person *</label><input type="text" name="vendor_name" id="vendor_name" required></div>
+                    <div class="field" style="margin-bottom:8px;"><label>Amount *</label><div class="amount-wrap"><span class="currency-badge">EUR</span><input type="number" step="0.01" name="amount" id="amount" required></div></div>
+                    <div class="field" style="margin-bottom:8px;">
                         <label>Frequency</label>
                         <select name="frequency" id="frequency">
                             <option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option>
@@ -480,8 +540,7 @@
                         </select>
                         <div class="other-field" id="frequencyOtherWrap"><input type="text" id="frequency_other" placeholder="Custom frequency"></div>
                     </div>
-                    <div class="field"><label>Status</label><select name="status" id="status"><option value="Active">Active</option><option value="Paused">Paused</option><option value="Cancelled">Cancelled</option></select></div>
-                    <div class="field">
+                    <div class="field" style="margin-bottom:8px;">
                         <label>Category</label>
                         <select name="category" id="category">
                             <option value="Entertainment">Entertainment</option><option value="Software">Software</option>
@@ -497,38 +556,61 @@
                         <div class="other-field" id="categoryOtherWrap"><input type="text" id="category_other" placeholder="Custom category"></div>
                     </div>
                 </div>
-                <div class="grid grid">
-                    <div class="field"><label>Start Date</label><input type="date" name="start_date" id="start_date"></div>
-                    <div class="field"><label>End Date</label><input type="date" name="end_date" id="end_date"></div>
-                </div>
-
-                <p class="section-title">Payment</p>
-                <div class="grid">
-                    <div class="field">
-                        <label>Payment Method</label>
-                        <select name="payment_method_type" id="payment_method_type">
-                            <option value="Credit Card">Credit Card</option><option value="Debit Card">Debit Card</option>
-                            <option value="Bank Account">Bank Account</option><option value="Direct Debit">Direct Debit</option>
-                            <option value="SEPA">SEPA</option><option value="PayPal">PayPal</option>
-                            <option value="Apple Pay">Apple Pay</option><option value="Google Pay">Google Pay</option>
-                            <option value="Cash">Cash</option><option value="Gift Card">Gift Card</option>
-                            <option value="Crypto">Crypto</option><option value="Other">Other</option>
+                
+                <div class="grid grid-4" style="margin-top:8px;">
+                    <div class="field" style="margin-bottom:8px;"><label>Status</label>
+                        <select name="status" id="status">
+                            <option value="Active">Active</option>
+                            <option value="Paused">Paused</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
-                        <div class="other-field" id="paymentOtherWrap"><input type="text" id="payment_method_other" placeholder="Custom method"></div>
                     </div>
-                    <div class="field"><label>Card / Account Last 4</label><input type="text" name="bank_account_last4" id="bank_account_last4" maxlength="4"></div>
-                    <div class="field"><label>Associated Email</label><input type="email" name="associated_email" id="associated_email"></div>
-                    <div class="field"><label>Associated Phone</label><input type="text" name="associated_phone" id="associated_phone"></div>
-                    <div class="field wide"><label>Billing Address</label><input type="text" name="billing_address" id="billing_address"></div>
-                    <div class="field"><label>Receipt Path / Link</label><input type="text" name="receipt_url_path" id="receipt_url_path"></div>
+                    <div class="field" style="margin-bottom:8px;"><label>Start Date</label><input type="date" name="start_date" id="start_date"></div>
+                    <div class="field" style="margin-bottom:8px;"><label>End Date</label><input type="date" name="end_date" id="end_date"></div>
+                    <div class="field" style="margin-bottom:8px;">
+                        <label>Auto-Deduction</label>
+                        <label class="checkbox-item" style="height:38px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 11px; margin-top:0;">
+                            <input type="checkbox" name="auto_deduction" id="auto_deduction"> Enabled
+                        </label>
+                    </div>
                 </div>
-
-                <p class="section-title">Options</p>
-                <div class="checkbox-row">
-                    <label class="checkbox-item"><input type="checkbox" name="auto_deduction" id="auto_deduction"> Auto-Deduction</label>
+                
+                <div class="checkbox-row" style="margin-top:8px;">
                     <label class="checkbox-item"><input type="checkbox" name="is_tax_deductible" id="is_tax_deductible"> Tax Considerate</label>
                 </div>
-                <div class="field wide" style="margin-top:12px;"><label>Notes</label><textarea name="notes" id="notes" rows="2"></textarea></div>
+                
+                <div class="field wide" style="margin-top:8px;"><label>Notes</label><textarea name="notes" id="notes" rows="2"></textarea></div>
+
+                <details class="collapsible">
+                    <summary>Account access &amp; payment details <span class="summary-hint">optional — website, login, card, contact info</span></summary>
+                    <div class="details-body">
+                        <div class="grid grid-4">
+                            <div class="field"><label>Website / Link</label><input type="text" name="website_url" id="website_url"></div>
+                            <div class="field"><label>Username</label><input type="text" name="username" id="username"></div>
+                            <div class="field"><label>Password</label><input type="password" name="password" id="password"></div>
+                            <div class="field">
+                                <label>Payment Method</label>
+                                <select name="payment_method_type" id="payment_method_type">
+                                    <option value="Credit Card">Credit Card</option><option value="Debit Card">Debit Card</option>
+                                    <option value="Bank Account">Bank Account</option><option value="Direct Debit">Direct Debit</option>
+                                    <option value="SEPA">SEPA</option><option value="PayPal">PayPal</option>
+                                    <option value="Apple Pay">Apple Pay</option><option value="Google Pay">Google Pay</option>
+                                    <option value="Cash">Cash</option><option value="Gift Card">Gift Card</option>
+                                    <option value="Crypto">Crypto</option><option value="Other">Other</option>
+                                </select>
+                                <div class="other-field" id="paymentOtherWrap"><input type="text" id="payment_method_other" placeholder="Custom method"></div>
+                            </div>
+                        </div>
+                        <div class="grid grid-4" style="margin-top:14px;">
+                            <div class="field"><label>Card / Account Last 4</label><input type="text" name="bank_account_last4" id="bank_account_last4" maxlength="4"></div>
+                            <div class="field"><label>Associated Email</label><input type="email" name="associated_email" id="associated_email"></div>
+                            <div class="field"><label>Associated Phone</label><input type="text" name="associated_phone" id="associated_phone"></div>
+                            <div class="field"><label>Receipt Path / Link</label><input type="text" name="receipt_url_path" id="receipt_url_path"></div>
+                        </div>
+                        <div class="field wide" style="margin-top:14px;"><label>Billing Address</label><input type="text" name="billing_address" id="billing_address"></div>
+                    </div>
+                </details>
+
                 <div class="btn-row">
                     <button type="submit" class="primary" id="submitBtn">Save record</button>
                     <button type="button" class="secondary" id="cancelBtn" style="display:none;" onclick="resetEditForm()">Cancel</button>
@@ -638,10 +720,23 @@ function exportReportFromPanel() {
     window.location.href = '/api/reports/export?' + p.toString();
 }
 
+function showToast(message, isError) {
+    const stack = document.getElementById('toastStack');
+    const el = document.createElement('div');
+    el.className = 'toast ' + (isError ? 'error' : 'success');
+    el.textContent = message;
+    stack.appendChild(el);
+    setTimeout(() => {
+        el.classList.add('leaving');
+        setTimeout(() => el.remove(), 200);
+    }, 3200);
+}
+
 function statusBadge(s) {
     const c = s === 'Active' ? 'badge-active' : s === 'Paused' ? 'badge-paused' : 'badge-cancelled';
     return `<span class="badge ${c}">${s || '-'}</span>`;
 }
+
 
 function toggleOther(selectId, wrapId) {
     document.getElementById(wrapId).classList.toggle('visible', document.getElementById(selectId).value === 'Other');
@@ -662,6 +757,9 @@ function setSelectWithOther(sel, other, val, opts) {
     else { sel.value = opts[0] || 'Other'; other.value = ''; }
     const m = { category:'categoryOtherWrap', frequency:'frequencyOtherWrap', payment_method_type:'paymentOtherWrap' };
     toggleOther(sel.id, m[sel.id]);
+    document.getElementById('daily_payment_method_type').addEventListener('change', () => {
+    toggleOther('daily_payment_method_type', 'daily_paymentOtherWrap');
+});
 }
 
 async function loadCategories() {
@@ -706,22 +804,34 @@ async function refreshTable() {
     const typeBadge = x.record_type === 'daily'
     ? '<span class="badge badge-daily">daily</span>'
     : '<span class="badge badge-recurring">recurring</span>';
+    const editLabel = x.record_type === 'daily' ? 'Edit' : 'Edit invoice';
     tr.innerHTML = `
-        <td>${x.display_date || '-'}</td>
-        <td><strong>${x.vendor || '-'}</strong></td>
-        <td>${x.category || '-'}</td>
-        <td>€ ${parseFloat(x.amount).toFixed(2)}</td>
-        <td>${typeBadge}</td>
-        <td>${x.tax_considerate ? '<span class="badge badge-tax">Yes</span>' : '-'}</td>
-        <td>${statusBadge(x.status)}</td>
-        <td><button type="button" class="danger" style="padding:5px 10px; font-size:0.78rem;" data-id="${x.id}">Delete</button></td>`;
-    tr.addEventListener('dblclick', () => {
-    if (x.record_type === 'daily') {
-        loadRecordIntoForm(x.id, 'daily');
-    } else {
-        openInvoiceEditor(x.id);
-    }
-});
+    <td><code>#${x.template_id || x.id}</code></td>
+    <td>${x.display_date || '-'}</td>
+    <td><strong>${x.vendor || '-'}</strong></td>
+    <td>${x.category || '-'}</td>
+    <td>€ ${parseFloat(x.amount).toFixed(2)}</td>
+    <td>${x.frequency || '-'}</td>
+    <td>${typeBadge}</td>
+    <td>${x.tax_considerate ? '<span class="badge badge-tax">Yes</span>' : '-'}</td>
+    <td>${x.auto_deduction ? '<span class="badge badge-active">Yes</span>' : '-'}</td>
+    <td>${statusBadge(x.status)}</td>
+    <td><div class="row-actions">
+        <button type="button" class="outline" data-edit-id="${x.id}">${editLabel}</button>
+        <button type="button" class="danger" data-id="${x.id}">Delete</button>
+    </div></td>`;
+    const openEditor = () => {
+        if (x.record_type === 'daily') {
+            loadRecordIntoForm(x.id, 'daily');
+        } else {
+            openInvoiceEditor(x.id);
+        }
+    };
+    tr.addEventListener('dblclick', openEditor);
+    tr.querySelector('button[data-edit-id]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditor();
+    });
     tr.querySelector('button[data-id]').addEventListener('click', (e) => {
         e.stopPropagation();
         deleteExpense(x.id);
@@ -774,9 +884,10 @@ document.getElementById('dailyForm').addEventListener('submit', async e => {
     msg.textContent = data.message;
     msg.style.display = 'block';
     msg.className = data.status === 'success' ? 'alert' : 'alert warn';
+    showToast(data.message, data.status !== 'success');
     if (data.status === 'success') {
         resetDailyForm();
-        refreshTable(); loadStats(); refreshUpcoming(); loadCategories();
+        refreshTable(); loadStats(); refreshUpcoming(); refreshSubscriptions(); loadCategories();
     }
 });
 
@@ -793,10 +904,16 @@ document.getElementById('expForm').addEventListener('submit', async e => {
     const msg = document.getElementById('msg');
     msg.textContent = data.message;
     msg.style.display = 'block';
+    msg.className = data.status === 'success' ? 'alert' : 'alert warn';
+    showToast(data.message, data.status !== 'success');
     if (data.status === 'success') {
         resetEditForm();
-        refreshTable(); loadStats(); refreshUpcoming(); loadCategories();
-    } else alert('Error: ' + data.message);
+        refreshTable(); 
+        loadStats(); 
+        refreshUpcoming(); 
+        refreshSubscriptions();
+        loadCategories();
+    }
 });
 
 function loadRecordIntoForm(id, recordType) {
@@ -833,6 +950,16 @@ function loadRecordIntoForm(id, recordType) {
             document.getElementById('dailySubmitBtn').textContent = 'Update daily expense';
             document.getElementById('dailyCancelBtn').style.display = 'block';
             document.getElementById('dailyDeleteBtn').style.display = 'block';
+            document.getElementById('daily_website_url').value = data.website_url || '';
+document.getElementById('daily_username').value = data.username || '';
+document.getElementById('daily_password').value = data.password || '';
+document.getElementById('daily_bank_account_last4').value = data.bank_account_last4 || '';
+document.getElementById('daily_associated_email').value = data.associated_email || '';
+document.getElementById('daily_associated_phone').value = data.associated_phone || '';
+document.getElementById('daily_billing_address').value = data.billing_address || '';
+document.getElementById('daily_receipt_url_path').value = data.receipt_url_path || '';
+// Set payment method with other handling
+setSelectWithOther(document.getElementById('daily_payment_method_type'), document.getElementById('daily_payment_method_other'), data.payment_method_type, PAYMENT_OPTIONS);
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
@@ -869,13 +996,16 @@ function resetDailyForm() {
     const lastDate = document.getElementById('daily_date').value || new Date().toISOString().slice(0, 10);
     document.getElementById('dailyForm').reset();
     document.getElementById('daily_expense_id').value = '';
-    document.getElementById('daily_date').value = lastDate; // keep the date you were using
+    document.getElementById('daily_date').value = lastDate;
     document.getElementById('dailyFormTitle').textContent = 'Quick Daily Expense';
     document.getElementById('dailySubmitBtn').textContent = 'Log Daily Expense';
     document.getElementById('dailyCancelBtn').style.display = 'none';
     document.getElementById('dailyDeleteBtn').style.display = 'none';
     document.querySelectorAll('#dailyForm input[name=receipt_url_path]').forEach(el => el.remove());
     document.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+    ['daily_website_url','daily_username','daily_password','daily_bank_account_last4','daily_associated_email','daily_associated_phone','daily_billing_address','daily_receipt_url_path','daily_payment_method_other'].forEach(id => document.getElementById(id).value = '');
+document.getElementById('daily_payment_method_type').value = 'Credit Card';
+document.getElementById('daily_paymentOtherWrap').classList.remove('visible');
 }
 
 async function deleteExpense(id) {
@@ -884,21 +1014,22 @@ async function deleteExpense(id) {
     const res = await fetch(`/api/expense/${id}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.status === 'success') {
+        showToast(data.message || 'Deleted.', false);
         resetDailyForm();
         resetEditForm();
         refreshTable();
         loadStats();
         refreshUpcoming();
+        refreshSubscriptions();
         loadCategories();
     } else {
-        alert(data.message || 'Delete failed');
+        showToast(data.message || 'Delete failed', true);
     }
 }
 
 function resetEditForm() {
     document.getElementById('expForm').reset();
     document.getElementById('expense_id').value = '';
-    setSubscriptionFieldsLocked(false);
     ['category_other','frequency_other','payment_method_other'].forEach(id => document.getElementById(id).value = '');
     ['categoryOtherWrap','frequencyOtherWrap','paymentOtherWrap'].forEach(id => document.getElementById(id).classList.remove('visible'));
     document.getElementById('formTitle').textContent = 'Add Subscription / Recurring Expense';
@@ -961,21 +1092,12 @@ document.getElementById('invoiceForm').addEventListener('submit', async e => {
     msg.textContent = data.message;
     msg.style.display = 'block';
     msg.className = data.status === 'success' ? 'alert' : 'alert warn';
+    showToast(data.message, data.status !== 'success');
     if (data.status === 'success') {
         closeInvoiceEditor();
-        refreshTable(); loadStats(); refreshUpcoming();
+        refreshTable(); loadStats(); refreshUpcoming(); refreshSubscriptions();
     }
 });
-
-function setSubscriptionFieldsLocked(locked) {
-    ['vendor_name','website_url','username','password','amount','frequency','category',
-     'payment_method_type','bank_account_last4','associated_email','associated_phone',
-     'billing_address','receipt_url_path','notes','auto_deduction','is_tax_deductible','start_date']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = locked; });
-    ['category_other','frequency_other','payment_method_other'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.disabled = locked;
-    });
-}
 
 async function refreshSubscriptions() {
     const res = await fetch('/api/subscriptions');
@@ -983,13 +1105,18 @@ async function refreshSubscriptions() {
     const body = document.getElementById('subsBody');
     body.innerHTML = '';
     if (!subs.length) {
-        body.innerHTML = '<tr class="empty-row"><td colspan="6">No subscriptions yet.</td></tr>';
+        body.innerHTML = '<tr class="empty-row"><td colspan="7">No subscriptions yet.</td></tr>';
         return;
     }
     subs.forEach(s => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><strong>${s.vendor_name || '-'}</strong></td><td>€ ${parseFloat(s.amount).toFixed(2)}</td><td>${s.frequency || '-'}</td><td>${s.start_date || '-'}</td><td>${s.end_date || '-'}</td><td>${statusBadge(s.status)}</td>`;
-        tr.addEventListener('dblclick', () => loadSubscriptionIntoForm(s.id));
+        tr.innerHTML = `<td><code>#${s.id}</code></td><td><strong>${s.vendor_name || '-'}</strong></td><td>€ ${parseFloat(s.amount).toFixed(2)}</td><td>${s.frequency || '-'}</td><td>${s.start_date || '-'}</td><td>${s.end_date || '-'}</td><td>${statusBadge(s.status)}</td><td><div class="row-actions"><button type="button" class="outline" data-sub-id="${s.id}">Edit subscription</button></div></td>`;
+        const openEditor = () => loadSubscriptionIntoForm(s.id);
+        tr.addEventListener('dblclick', openEditor);
+        tr.querySelector('button[data-sub-id]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditor();
+        });
         body.appendChild(tr);
     });
 }
@@ -1017,11 +1144,8 @@ function loadSubscriptionIntoForm(id) {
         setSelectWithOther(document.getElementById('payment_method_type'), document.getElementById('payment_method_other'), data.payment_method_type, PAYMENT_OPTIONS);
         document.getElementById('auto_deduction').checked = data.auto_deduction === 1;
         document.getElementById('is_tax_deductible').checked = data.is_tax_deductible === 1;
-
-        setSubscriptionFieldsLocked(true);
-
-        document.getElementById('formTitle').textContent = 'Manage Subscription (ID: ' + data.id + ')';
-        document.getElementById('submitBtn').textContent = 'Update status / end date';
+        document.getElementById('formTitle').textContent = 'Edit Subscription (ID: ' + data.id + ')';
+        document.getElementById('submitBtn').textContent = 'Update subscription';
         document.getElementById('cancelBtn').style.display = 'block';
         document.getElementById('deleteBtn').style.display = 'block';
         window.scrollTo({ top: 0, behavior: 'smooth' });

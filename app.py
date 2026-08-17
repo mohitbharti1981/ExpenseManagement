@@ -62,14 +62,14 @@ def advance_date(d, frequency):
 
 def iter_occurrence_dates(start_date_str, frequency, end_date_str, until_date):
     """Yield ISO date strings from start_date up to and including until_date,
-    stepping by frequency, stopping early if end_date is exceeded."""
+    stopping when end_date is exceeded (not included)."""
     current = parse_date(start_date_str)
     if not current:
         return
     end_limit = parse_date(end_date_str) if end_date_str else None
     guard = 0
     while current and current <= until_date and guard < 2000:
-        if end_limit and current > end_limit:
+        if end_limit and current >= end_limit:  # Changed > to >= to exclude end date
             return
         yield current.isoformat()
         nxt = advance_date(current, frequency)
@@ -79,10 +79,9 @@ def iter_occurrence_dates(start_date_str, frequency, end_date_str, until_date):
         guard += 1
 
 
-def generate_recurring_occurrences(conn, until_date=None):
-    """Compute virtual expense occurrences for every subscription, straight
-    from start_date + frequency — nothing is written to the database. Dates
-    the user explicitly deleted (expense_exceptions) are skipped."""
+def generate_recurring_occurrences(
+    conn, until_date=None, from_date=None, only_active=False
+):
     if until_date is None:
         until_date = date.today()
     cursor = conn.cursor()
@@ -94,28 +93,72 @@ def generate_recurring_occurrences(conn, until_date=None):
     ).fetchall()
     skip = {(r["subscription_id"], r["occurrence_date"]) for r in exceptions}
 
+    # Fetch overrides
+    overrides_rows = cursor.execute(
+        "SELECT subscription_id, occurrence_date, amount, category, status, is_tax_deductible, notes, expense_date FROM occurrence_overrides"
+    ).fetchall()
+    overrides = {}
+    for r in overrides_rows:
+        key = (r["subscription_id"], r["occurrence_date"])
+        overrides[key] = {
+            "amount": r["amount"],
+            "category": r["category"],
+            "status": r["status"],
+            "is_tax_deductible": r["is_tax_deductible"],
+            "notes": r["notes"],
+            "expense_date": r["expense_date"],
+        }
+
     occurrences = []
     for sub in subs:
+        # Convert to dict to safely use .get()
+        sub = dict(sub)
+        if only_active and sub["status"] != "Active":
+            continue
+
+        effective_end = sub["end_date"]
+        deactivated_on = sub.get("deactivated_on")  # now works with dict
+        if deactivated_on and (not effective_end or deactivated_on < effective_end):
+            effective_end = deactivated_on
+
         for d in iter_occurrence_dates(
-            sub["start_date"], sub["frequency"], sub["end_date"], until_date
+            sub["start_date"], sub["frequency"], effective_end, until_date
         ):
+            if from_date and d < from_date:
+                continue
             if (sub["id"], d) in skip:
                 continue
-            occurrences.append(
-                {
-                    "id": f"v{sub['id']}_{d}",
-                    "template_id": sub["id"],
-                    "vendor_name": sub["vendor_name"],
-                    "category": sub["category"],
-                    "amount": sub["amount"],
-                    "currency": sub["currency"],
-                    "frequency": sub["frequency"],
-                    "expense_date": d,
-                    "status": sub["status"],
-                    "is_tax_deductible": sub["is_tax_deductible"],
-                    "notes": sub["notes"],
-                }
-            )
+
+            occ = {
+                "id": f"v{sub['id']}_{d}",
+                "template_id": sub["id"],
+                "vendor_name": sub["vendor_name"],
+                "category": sub["category"],
+                "amount": sub["amount"],
+                "currency": sub["currency"],
+                "frequency": sub["frequency"],
+                "start_date": sub["start_date"],
+                "expense_date": d,
+                "status": sub["status"],
+                "is_tax_deductible": sub["is_tax_deductible"],
+                "notes": sub["notes"],
+                "auto_deduction": sub["auto_deduction"],  # <-- ADD THIS LINE
+            }
+            override = overrides.get((sub["id"], d))
+            if override:
+                if override["amount"] is not None:
+                    occ["amount"] = override["amount"]
+                if override["category"]:
+                    occ["category"] = override["category"]
+                if override["status"]:
+                    occ["status"] = override["status"]
+                if override["is_tax_deductible"] is not None:
+                    occ["is_tax_deductible"] = override["is_tax_deductible"]
+                if override["notes"] is not None:
+                    occ["notes"] = override["notes"]
+                if override["expense_date"]:
+                    occ["expense_date"] = override["expense_date"]
+            occurrences.append(occ)
     return occurrences
 
 
@@ -246,7 +289,7 @@ def _get_all_expense_items(conn):
         cursor.execute(
             f"""
             SELECT id, vendor_name, category, amount, currency, frequency,
-                   expense_date, status, is_tax_deductible, record_type, notes
+                   expense_date, status, is_tax_deductible, record_type, notes, auto_deduction
             FROM expenses
             {where} {joiner} record_type = 'daily'
             """,
@@ -267,6 +310,7 @@ def _get_all_expense_items(conn):
                     "tax_considerate": r["is_tax_deductible"] == 1,
                     "record_type": "daily",
                     "notes": r["notes"],
+                    "auto_deduction": r["auto_deduction"],
                 }
             )
 
@@ -287,6 +331,7 @@ def _get_all_expense_items(conn):
                         "tax_considerate": occ["is_tax_deductible"] == 1,
                         "record_type": "recurring",
                         "notes": occ["notes"],
+                        "auto_deduction": occ["auto_deduction"],
                     }
                 )
 
@@ -319,6 +364,7 @@ def add_expense():
     conn = get_connection()
     cursor = conn.cursor()
 
+    # ---------- Handle editing an occurrence (invoice) of a subscription ----------
     virtual = _parse_virtual_id(expense_id) if edit_scope == "occurrence" else None
     if virtual:
         sub_id, occ_date = virtual
@@ -329,61 +375,73 @@ def add_expense():
                 {"status": "error", "message": "Subscription not found"}
             ), 404
 
-        # Materialize this single occurrence as its own standalone record,
-        # carrying over anything the form didn't override.
-        materialized = dict(sub)
-        materialized.update(
-            {
-                "expense_date": data["expense_date"] or occ_date,
-                "amount": data["amount"] or sub["amount"],
-                "category": data["category"] or sub["category"],
-                "status": data["status"] or sub["status"],
-                "is_tax_deductible": data["is_tax_deductible"],
-                "notes": data["notes"],
-                "record_type": "daily",
-                "frequency": "One-time",
-                "start_date": None,
-                "end_date": None,
-                "parent_expense_id": sub_id,
-            }
-        )
-        materialized.pop("id", None)
-        materialized.pop("created_at", None)
-
+        # Upsert override for this occurrence
         try:
             cursor.execute(
                 """
-                INSERT INTO expenses (
-                    vendor_name, website_url, username, password, amount, currency, frequency,
-                    expense_date, start_date, end_date, auto_deduction,
-                    payment_method_type, bank_account_last4, associated_email, associated_phone,
-                    billing_address, category, is_tax_deductible, tax_rate_percent,
-                    receipt_url_path, status, notes, record_type, parent_expense_id
-                ) VALUES (
-                    :vendor_name, :website_url, :username, :password, :amount, :currency, :frequency,
-                    :expense_date, :start_date, :end_date, :auto_deduction,
-                    :payment_method_type, :bank_account_last4, :associated_email, :associated_phone,
-                    :billing_address, :category, :is_tax_deductible, :tax_rate_percent,
-                    :receipt_url_path, :status, :notes, :record_type, :parent_expense_id
-                )
-                """,
-                materialized,
-            )
-            cursor.execute(
-                "INSERT OR IGNORE INTO expense_exceptions (subscription_id, occurrence_date) VALUES (?, ?)",
-                (sub_id, occ_date),
+                INSERT INTO occurrence_overrides (
+                    subscription_id, occurrence_date, amount, category, status,
+                    is_tax_deductible, notes, expense_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(subscription_id, occurrence_date) DO UPDATE SET
+                    amount = excluded.amount,
+                    category = excluded.category,
+                    status = excluded.status,
+                    is_tax_deductible = excluded.is_tax_deductible,
+                    notes = excluded.notes,
+                    expense_date = excluded.expense_date
+            """,
+                (
+                    sub_id,
+                    occ_date,
+                    data["amount"] if data["amount"] != sub["amount"] else None,
+                    data["category"] if data["category"] != sub["category"] else None,
+                    data["status"] if data["status"] != sub["status"] else None,
+                    data["is_tax_deductible"]
+                    if data["is_tax_deductible"] != sub["is_tax_deductible"]
+                    else None,
+                    data["notes"] if data["notes"] != sub["notes"] else None,
+                    data["expense_date"] if data["expense_date"] != occ_date else None,
+                ),
             )
             conn.commit()
+            conn.close()
             return jsonify(
                 {"status": "success", "message": "Invoice updated successfully!"}
             ), 200
         except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 400
-        finally:
             conn.close()
+            return jsonify({"status": "error", "message": str(e)}), 400
 
+    # ---------- Handle editing the subscription itself or adding new ----------
     if expense_id:
         data["id"] = int(expense_id)
+
+    # Track deactivation for subscriptions
+    if data["record_type"] == "recurring":
+        existing_status_row = None
+        if expense_id:
+            existing_status_row = conn.execute(
+                "SELECT status, deactivated_on FROM expenses WHERE id = ?",
+                (data["id"],),
+            ).fetchone()
+        if data["status"] != "Active":
+            already_deactivated = (
+                existing_status_row
+                and existing_status_row["status"] != "Active"
+                and existing_status_row["deactivated_on"]
+            )
+            data["deactivated_on"] = (
+                existing_status_row["deactivated_on"]
+                if already_deactivated
+                else date.today().isoformat()
+            )
+        else:
+            data["deactivated_on"] = None
+    else:
+        data["deactivated_on"] = None
+
+    if expense_id:
         query = """
             UPDATE expenses SET
                 vendor_name=:vendor_name, website_url=:website_url, username=:username,
@@ -395,7 +453,7 @@ def add_expense():
                 billing_address=:billing_address, category=:category,
                 is_tax_deductible=:is_tax_deductible, tax_rate_percent=:tax_rate_percent,
                 receipt_url_path=:receipt_url_path, status=:status, notes=:notes,
-                record_type=:record_type
+                record_type=:record_type, deactivated_on=:deactivated_on
             WHERE id=:id
         """
         msg = "Expense updated successfully!"
@@ -407,13 +465,13 @@ def add_expense():
                 expense_date, start_date, end_date, auto_deduction,
                 payment_method_type, bank_account_last4, associated_email, associated_phone,
                 billing_address, category, is_tax_deductible, tax_rate_percent,
-                receipt_url_path, status, notes, record_type
+                receipt_url_path, status, notes, record_type, deactivated_on
             ) VALUES (
                 :vendor_name, :website_url, :username, :password, :amount, :currency, :frequency,
                 :expense_date, :start_date, :end_date, :auto_deduction,
                 :payment_method_type, :bank_account_last4, :associated_email, :associated_phone,
                 :billing_address, :category, :is_tax_deductible, :tax_rate_percent,
-                :receipt_url_path, :status, :notes, :record_type
+                :receipt_url_path, :status, :notes, :record_type, :deactivated_on
             )
         """
         msg = "Expense added successfully!"
@@ -422,11 +480,11 @@ def add_expense():
     try:
         cursor.execute(query, data)
         conn.commit()
+        conn.close()
         return jsonify({"status": "success", "message": msg}), status_code
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    finally:
         conn.close()
+        return jsonify({"status": "error", "message": str(e)}), 400
 
 
 @app.route("/api/expenses")
@@ -450,6 +508,7 @@ def get_expenses_api():
                 "tax_considerate": i["tax_considerate"],
                 "record_type": i["record_type"],
                 "notes": i["notes"],
+                "auto_deduction": i["auto_deduction"],
             }
             for i in items
         ]
@@ -634,35 +693,62 @@ def upcoming_expenses():
     days = int(request.args.get("days", 30))
     today = date.today()
     end = today + timedelta(days=days)
+    window_start = (today + timedelta(days=1)).isoformat()
 
     conn = get_connection()
-    subs = conn.execute(
-        "SELECT * FROM expenses WHERE record_type = 'recurring' AND parent_expense_id IS NULL AND status = 'Active'"
+
+    # Reuse the same occurrence generator used everywhere else, so exceptions
+    # (deleted occurrences) and the deactivation cutoff are respected here too
+    # — the old version here had its own separate loop that ignored both.
+    occs = generate_recurring_occurrences(
+        conn, until_date=end, from_date=window_start, only_active=True
+    )
+    upcoming = [
+        {
+            "id": o["template_id"],
+            "vendor": o["vendor_name"],
+            "category": o["category"],
+            "amount": o["amount"],
+            "currency": o["currency"],
+            "frequency": o["frequency"],
+            "start_date": o["start_date"],
+            "next_billing": o["expense_date"],
+            "status": o["status"],
+        }
+        for o in occs
+    ]
+
+    # If a future occurrence was individually edited (materialized into its
+    # own 'daily' record via the invoice editor), show the overridden
+    # amount/date instead of silently keeping the old subscription defaults.
+    materialized = conn.execute(
+        """
+        SELECT e.*, p.status AS parent_status
+        FROM expenses e
+        JOIN expenses p ON p.id = e.parent_expense_id
+        WHERE e.record_type = 'daily' AND e.parent_expense_id IS NOT NULL
+          AND e.expense_date >= ? AND e.expense_date <= ?
+          AND p.status = 'Active'
+        """,
+        (window_start, end.isoformat()),
     ).fetchall()
     conn.close()
 
-    upcoming = []
-    for sub in subs:
-        d = parse_date(sub["start_date"])
-        end_limit = parse_date(sub["end_date"]) if sub["end_date"] else None
-        guard = 0
-        while d and d <= today and guard < 2000:
-            d = advance_date(d, sub["frequency"])
-            guard += 1
-        if d and (not end_limit or d <= end_limit) and today < d <= end:
-            upcoming.append(
-                {
-                    "id": sub["id"],
-                    "vendor": sub["vendor_name"],
-                    "category": sub["category"],
-                    "amount": sub["amount"],
-                    "currency": sub["currency"],
-                    "frequency": sub["frequency"],
-                    "start_date": sub["start_date"],
-                    "next_billing": d.isoformat(),
-                    "status": sub["status"],
-                }
-            )
+    for m in materialized:
+        upcoming.append(
+            {
+                "id": m["parent_expense_id"],
+                "vendor": m["vendor_name"],
+                "category": m["category"],
+                "amount": m["amount"],
+                "currency": m["currency"],
+                "frequency": m["frequency"],
+                "start_date": m["expense_date"],
+                "next_billing": m["expense_date"],
+                "status": m["parent_status"],
+            }
+        )
+
     upcoming.sort(key=lambda x: x["next_billing"])
     return jsonify(upcoming)
 

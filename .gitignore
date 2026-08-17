@@ -31,6 +31,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+### uploaded receipts 
+uploads/
+
 ### IDEs and Editors ###
 # Cursor / VS Code settings (Ignore user history, but keep shared launch configurations)
 .vscode/.history/
